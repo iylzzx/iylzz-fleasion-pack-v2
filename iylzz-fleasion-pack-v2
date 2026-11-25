@@ -1,0 +1,2046 @@
+--[[
+    Fleasion Pack [rivals]
+    Roblox client-side visual utility scaffold.
+
+    UI:
+      - One rectangular Toggle UI button opens and closes the menu
+      - Compact rectangular draggable menu inspired by the reference image
+      - No separate close button
+      - Both controls and the menu header are draggable
+      - Rectangular Visual and Texture tabs
+      - Every feature row has Apply and Auto controls
+      - Misp includes Sata Andaji, Yokai sound replacement, and Minecraft Font
+
+    Notes:
+      - This is intended for a LocalScript in an experience you own
+        or have permission to modify.
+      - Workspace changes are client-side where supported.
+      - The Minecraft option runs the URL you supplied. Only use
+        remote code you trust; its contents can change at any time.
+]]
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+-- Remove an older copy if this script is executed again.
+local oldGui = playerGui:FindFirstChild("iylzzVisualRivals")
+if oldGui then
+    oldGui:Destroy()
+end
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "iylzzVisualRivals"
+gui.ResetOnSpawn = false
+gui.IgnoreGuiInset = true
+gui.DisplayOrder = 100
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+gui.Parent = playerGui
+
+local function make(className, properties, parent)
+    local object = Instance.new(className)
+    for property, value in pairs(properties) do
+        object[property] = value
+    end
+
+    -- Compact Kiciahook-inspired styling; feature callbacks remain unchanged.
+    if object:IsA("Frame") or object:IsA("ScrollingFrame") then
+        if object.BackgroundTransparency < 1 then
+            object.BackgroundColor3 = object.Name == "MainMenu"
+                and Color3.fromRGB(0, 0, 0)
+                or Color3.fromRGB(6, 6, 6)
+        end
+    elseif object:IsA("TextLabel") or object:IsA("TextButton") or object:IsA("TextBox") then
+        object.TextStrokeTransparency = 1
+        object.TextSize = math.min(object.TextSize, 12)
+        object.Font = Enum.Font.Gotham
+
+        -- Keep feature labels/buttons in their original text colours.
+        -- Section headings are coloured red separately by addSectionHeader().
+
+        if object:IsA("TextButton") then
+            if object.Name == "UnloadAllButton" then
+                -- Only Unload All receives a solid red background.
+                object.BackgroundColor3 = Color3.fromRGB(197, 59, 59)
+                object.BorderColor3 = Color3.fromRGB(197, 59, 59)
+                object.TextColor3 = Color3.fromRGB(255, 255, 255)
+            else
+                object.BackgroundColor3 = Color3.fromRGB(12, 13, 13)
+            end
+        end
+    end
+
+    object.Parent = parent
+    return object
+end
+
+local function addCorner(object, radius)
+    make("UICorner", {CornerRadius = UDim.new(0, radius)}, object)
+end
+
+local function addStroke(object, color)
+    make("UIStroke", {
+        Color = color or Color3.fromRGB(75, 75, 75),
+        Thickness = 1
+    }, object)
+end
+
+-- Dragging works for mouse and touch.
+local function makeDraggable(handle, target)
+    local dragging = false
+    local dragInput
+    local dragStart
+    local startPosition
+
+    handle.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPosition = target.Position
+
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+
+    handle.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement
+            or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and input == dragInput then
+            local delta = input.Position - dragStart
+            target.Position = UDim2.new(
+                startPosition.X.Scale,
+                startPosition.X.Offset + delta.X,
+                startPosition.Y.Scale,
+                startPosition.Y.Offset + delta.Y
+            )
+        end
+    end)
+end
+
+-- One compact rectangular Toggle UI button.
+local toggle = make("TextButton", {
+    Name = "ToggleUI",
+    ZIndex = 100,
+    Size = UDim2.fromOffset(106, 32),
+    Position = UDim2.new(0, 24, 0, 135),
+    BackgroundColor3 = Color3.fromRGB(22, 22, 25),
+    Text = "Toggle UI",
+    TextColor3 = Color3.fromRGB(235, 235, 240),
+    TextSize = 14,
+    Font = Enum.Font.Code,
+    AutoButtonColor = true
+}, gui)
+make("UIScale", {Scale = 0.96}, toggle)
+addCorner(toggle, 0)
+-- Flat toggle: no outline/glow effect.
+makeDraggable(toggle, toggle)
+
+-- Main rectangular menu, styled after the supplied reference.
+local menu = make("Frame", {
+    Name = "MainMenu",
+    ZIndex = 50,
+    Size = UDim2.fromOffset(460, 290),
+    Position = UDim2.new(0.5, -230, 0.5, -145),
+    BackgroundColor3 = Color3.fromRGB(18, 18, 20),
+    BorderSizePixel = 1,
+    BorderColor3 = Color3.fromRGB(75, 75, 80),
+    Visible = false
+}, gui)
+make("UIScale", {Scale = 0.96}, menu)
+addCorner(menu, 0)
+addStroke(menu, Color3.fromRGB(75, 75, 80))
+
+-- Keep the entire menu below the floating Toggle UI control.
+local function setMenuLayer()
+    for _, descendant in ipairs(menu:GetDescendants()) do
+        if descendant:IsA("GuiObject") then
+            descendant.ZIndex = 50
+        end
+    end
+end
+menu.DescendantAdded:Connect(function(descendant)
+    if descendant:IsA("GuiObject") then
+        descendant.ZIndex = 50
+    end
+end)
+
+local topBar = make("TextLabel", {
+    Name = "TopBar",
+    Size = UDim2.new(1, -2, 0, 48),
+    Position = UDim2.fromOffset(1, 1),
+    BackgroundColor3 = Color3.fromRGB(28, 28, 31),
+    BorderSizePixel = 0,
+    Text = "Iylzz’s Fleasion Pack",
+    TextColor3 = Color3.fromRGB(230, 230, 235),
+    TextSize = 18,
+    Font = Enum.Font.Code,
+    TextXAlignment = Enum.TextXAlignment.Left
+}, menu)
+topBar.TextXAlignment = Enum.TextXAlignment.Left
+topBar.TextSize = 19 -- Override the shared compact text cap for the pack title.
+local topBarPadding = Instance.new("UIPadding")
+topBarPadding.PaddingLeft = UDim.new(0, 20) -- shift the pack title further right
+topBarPadding.Parent = topBar
+makeDraggable(topBar, menu)
+setMenuLayer()
+
+local tabBar = make("Frame", {
+    Size = UDim2.new(1, -16, 0, 38),
+    Position = UDim2.fromOffset(8, 56),
+    BackgroundTransparency = 1
+}, menu)
+
+local visualTab = make("TextButton", {
+    Size = UDim2.new(1/5, -5, 1, 0),
+    BackgroundColor3 = Color3.fromRGB(197, 59, 59),
+    Text = "Visual",
+    TextColor3 = Color3.new(1, 1, 1),
+    TextSize = 13,
+    Font = Enum.Font.GothamSemibold
+}, tabBar)
+addCorner(visualTab, 0)
+
+local textureTab = make("TextButton", {
+    Size = UDim2.new(1/5, -5, 1, 0),
+    Position = UDim2.new(1/5, 1, 0, 0),
+    BackgroundColor3 = Color3.fromRGB(12, 13, 13),
+    Text = "Texture",
+    TextColor3 = Color3.new(1, 1, 1),
+    TextSize = 13,
+    Font = Enum.Font.GothamSemibold
+}, tabBar)
+addCorner(textureTab, 0)
+textureTab.Visible = false
+
+local mispTab = make("TextButton", {
+    Size = UDim2.new(1/5, -5, 1, 0),
+    Position = UDim2.new(1/5, 1, 0, 0),
+    BackgroundColor3 = Color3.fromRGB(12, 13, 13),
+    Text = "Misp",
+    TextColor3 = Color3.new(1, 1, 1),
+    TextSize = 13,
+    Font = Enum.Font.GothamSemibold
+}, tabBar)
+addCorner(mispTab, 0)
+
+local performTab = make("TextButton", {
+    Size = UDim2.new(1/5, -5, 1, 0),
+    Position = UDim2.new(2/5, 2, 0, 0),
+    BackgroundColor3 = Color3.fromRGB(12, 13, 13),
+    Text = "Perform",
+    TextColor3 = Color3.new(1, 1, 1),
+    TextSize = 13,
+    Font = Enum.Font.GothamSemibold
+}, tabBar)
+addCorner(performTab, 0)
+
+local settingsTab = make("TextButton", {
+    Size = UDim2.new(1/5, -5, 1, 0),
+    Position = UDim2.new(3/5, 3, 0, 0),
+    BackgroundColor3 = Color3.fromRGB(12, 13, 13),
+    Text = "Settings",
+    TextColor3 = Color3.new(1, 1, 1),
+    TextSize = 13,
+    Font = Enum.Font.GothamSemibold
+}, tabBar)
+addCorner(settingsTab, 0)
+
+local othersTab = make("TextButton", {
+    Size = UDim2.new(1/5, -5, 1, 0),
+    Position = UDim2.new(4/5, 4, 0, 0),
+    BackgroundColor3 = Color3.fromRGB(12, 13, 13),
+    Text = "Others",
+    TextColor3 = Color3.new(1, 1, 1),
+    TextSize = 13,
+    Font = Enum.Font.GothamSemibold
+}, tabBar)
+addCorner(othersTab, 0)
+
+local pages = make("Frame", {
+    Name = "Pages",
+    Size = UDim2.new(1, -16, 1, -104),
+    Position = UDim2.fromOffset(8, 98),
+    BackgroundTransparency = 1
+}, menu)
+
+local visualPage = make("Frame", {
+    Name = "VisualPage",
+    Size = UDim2.fromScale(1, 1),
+    BackgroundTransparency = 1,
+    Visible = true
+}, pages)
+
+local texturePage = make("ScrollingFrame", {
+    Name = "TexturePage",
+    Size = UDim2.fromScale(1, 1),
+    BackgroundTransparency = 1,
+    BorderSizePixel = 0,
+    ScrollBarThickness = 5,
+    ScrollBarImageColor3 = Color3.fromRGB(125, 125, 130),
+    CanvasSize = UDim2.new(0, 0, 0, 0),
+    AutomaticCanvasSize = Enum.AutomaticSize.None,
+    ScrollingDirection = Enum.ScrollingDirection.Y,
+    VerticalScrollBarInset = Enum.ScrollBarInset.ScrollBar,
+    ElasticBehavior = Enum.ElasticBehavior.WhenScrollable,
+    Visible = false
+}, pages)
+
+local textureList = make("UIListLayout", {
+    FillDirection = Enum.FillDirection.Vertical,
+    SortOrder = Enum.SortOrder.LayoutOrder,
+    Padding = UDim.new(0, 6)
+}, texturePage)
+
+local settingsPage = make("ScrollingFrame", {
+    Name = "SettingsPage",
+    Size = UDim2.fromScale(1, 1),
+    BackgroundTransparency = 1,
+    BorderSizePixel = 0,
+    ScrollBarThickness = 5,
+    ScrollBarImageColor3 = Color3.fromRGB(125, 125, 130),
+    CanvasSize = UDim2.new(0, 0, 0, 0),
+    AutomaticCanvasSize = Enum.AutomaticSize.Y,
+    ScrollingDirection = Enum.ScrollingDirection.Y,
+    Visible = false
+}, pages)
+
+local settingsList = make("UIListLayout", {
+    FillDirection = Enum.FillDirection.Vertical,
+    SortOrder = Enum.SortOrder.LayoutOrder,
+    Padding = UDim.new(0, 6)
+}, settingsPage)
+
+local mispPage = make("ScrollingFrame", {
+    Name = "MispPage",
+    Size = UDim2.fromScale(1, 1),
+    BackgroundTransparency = 1,
+    BorderSizePixel = 0,
+    ScrollBarThickness = 5,
+    ScrollBarImageColor3 = Color3.fromRGB(125, 125, 130),
+    CanvasSize = UDim2.new(0, 0, 0, 0),
+    AutomaticCanvasSize = Enum.AutomaticSize.Y,
+    ScrollingDirection = Enum.ScrollingDirection.Y,
+    Visible = false
+}, pages)
+
+local mispList = make("UIListLayout", {
+    FillDirection = Enum.FillDirection.Vertical,
+    SortOrder = Enum.SortOrder.LayoutOrder,
+    Padding = UDim.new(0, 6)
+}, mispPage)
+
+local performPage = make("Frame", {
+    Name = "PerformPage",
+    Size = UDim2.fromScale(1, 1),
+    BackgroundTransparency = 1,
+    Visible = false
+}, pages)
+
+local othersPage = make("Frame", {
+    Name = "OthersPage",
+    Size = UDim2.fromScale(1, 1),
+    BackgroundTransparency = 1,
+    Visible = false
+}, pages)
+
+performPage.ClipsDescendants = true
+
+mispList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    mispPage.CanvasSize = UDim2.fromOffset(0, mispList.AbsoluteContentSize.Y + 8)
+end)
+
+settingsList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    settingsPage.CanvasSize = UDim2.fromOffset(0, settingsList.AbsoluteContentSize.Y + 8)
+end)
+
+setMenuLayer()
+
+local othersTitle = make("TextLabel", {
+    Name = "OthersTitle",
+    Size = UDim2.new(1, -8, 0, 28),
+    Position = UDim2.fromOffset(4, 4),
+    BackgroundTransparency = 1,
+    Text = "Support the creator",
+    TextColor3 = Color3.fromRGB(230, 230, 235),
+    TextSize = 15,
+    Font = Enum.Font.Code,
+    TextXAlignment = Enum.TextXAlignment.Left
+}, othersPage)
+
+local followAcidLabel = make("TextLabel", {
+    Name = "FollowAcidOnTikTok",
+    Size = UDim2.new(1, -8, 0, 42),
+    Position = UDim2.fromOffset(4, 40),
+    BackgroundColor3 = Color3.fromRGB(34, 34, 38),
+    BorderSizePixel = 1,
+    BorderColor3 = Color3.fromRGB(75, 75, 80),
+    Text = "FOLLOW @iylzzx ON TIKTOK",
+    TextColor3 = Color3.fromRGB(240, 240, 240),
+    TextSize = 13,
+    Font = Enum.Font.Code
+}, othersPage)
+addCorner(followAcidLabel, 0)
+
+local visualStatus = make("TextLabel", {
+    Name = "VisualStatus",
+    Size = UDim2.new(1, -4, 0, 22),
+    Position = UDim2.fromOffset(2, 0),
+    BackgroundTransparency = 1,
+    Text = "Apply runs once; Auto reapplies enabled features.",
+    TextColor3 = Color3.fromRGB(175, 175, 175),
+    TextSize = 11,
+    Font = Enum.Font.Code,
+    TextXAlignment = Enum.TextXAlignment.Left
+}, visualPage)
+
+local mispStatus = make("TextLabel", {
+    Name = "MispStatus",
+    Size = UDim2.new(1, -4, 0, 22),
+    Position = UDim2.fromOffset(2, 0),
+    BackgroundTransparency = 1,
+    Text = "Apply runs the selected client-side loader once.",
+    TextColor3 = Color3.fromRGB(175, 175, 175),
+    TextSize = 11,
+    Font = Enum.Font.Code,
+    TextXAlignment = Enum.TextXAlignment.Left
+}, mispPage)
+
+local performStatus = make("TextLabel", {
+    Name = "PerformStatus",
+    Size = UDim2.new(1, -4, 0, 22),
+    Position = UDim2.fromOffset(2, 0),
+    BackgroundTransparency = 1,
+    Text = "Performance options.",
+    TextColor3 = Color3.fromRGB(175, 175, 175),
+    TextSize = 11,
+    Font = Enum.Font.Code,
+    TextXAlignment = Enum.TextXAlignment.Left
+}, performPage)
+
+local fpsBoostRow = make("Frame", {
+    Name = "FPSBoostRow",
+    Size = UDim2.new(1, -7, 0, 42),
+    Position = UDim2.fromOffset(0, 26),
+    BackgroundColor3 = Color3.fromRGB(34, 34, 38),
+    BorderSizePixel = 1,
+    BorderColor3 = Color3.fromRGB(75, 75, 80)
+}, performPage)
+addCorner(fpsBoostRow, 0)
+
+make("TextLabel", {
+    Name = "FPSBoostLabel",
+    Size = UDim2.new(1, -174, 1, 0),
+    Position = UDim2.fromOffset(12, 0),
+    BackgroundTransparency = 1,
+    Text = "FPS Boost",
+    TextColor3 = Color3.fromRGB(230, 230, 235),
+    TextSize = 13,
+    Font = Enum.Font.Code,
+    TextXAlignment = Enum.TextXAlignment.Left
+}, fpsBoostRow)
+
+local fpsApplyButton = make("TextButton", {
+    Name = "FPSBoostApply",
+    Size = UDim2.fromOffset(68, 28),
+    Position = UDim2.new(1, -158, 0.5, -14),
+    BackgroundColor3 = Color3.fromRGB(62, 62, 68),
+    BorderSizePixel = 1,
+    BorderColor3 = Color3.fromRGB(95, 95, 102),
+    Text = "Apply",
+    TextColor3 = Color3.fromRGB(245, 245, 245),
+    TextSize = 11,
+    Font = Enum.Font.Code,
+    AutoButtonColor = true
+}, fpsBoostRow)
+addCorner(fpsApplyButton, 0)
+
+local fpsAutoButton = make("TextButton", {
+    Name = "FPSBoostAutoApply",
+    Size = UDim2.fromOffset(82, 28),
+    Position = UDim2.new(1, -84, 0.5, -14),
+    BackgroundColor3 = Color3.fromRGB(42, 48, 43),
+    BorderSizePixel = 1,
+    BorderColor3 = Color3.fromRGB(85, 105, 88),
+    Text = "Auto: OFF",
+    TextColor3 = Color3.fromRGB(235, 245, 235),
+    TextSize = 11,
+    Font = Enum.Font.Code,
+    AutoButtonColor = true
+}, fpsBoostRow)
+addCorner(fpsAutoButton, 0)
+
+local visualOptions = make("ScrollingFrame", {
+    Name = "VisualOptions",
+    Size = UDim2.new(1, 0, 1, -26),
+    Position = UDim2.fromOffset(0, 26),
+    BackgroundTransparency = 1,
+    BorderSizePixel = 0,
+    ScrollBarThickness = 5,
+    ScrollBarImageColor3 = Color3.fromRGB(125, 125, 130),
+    CanvasSize = UDim2.new(0, 0, 0, 0),
+    AutomaticCanvasSize = Enum.AutomaticSize.Y,
+    ScrollingDirection = Enum.ScrollingDirection.Y
+}, visualPage)
+
+local visualList = make("UIListLayout", {
+    FillDirection = Enum.FillDirection.Vertical,
+    SortOrder = Enum.SortOrder.LayoutOrder,
+    Padding = UDim.new(0, 6)
+}, visualOptions)
+
+visualOptions.ClipsDescendants = true
+visualList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    visualOptions.CanvasSize = UDim2.fromOffset(0, visualList.AbsoluteContentSize.Y + 6)
+end)
+
+texturePage.ClipsDescendants = true
+textureList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    texturePage.CanvasSize = UDim2.fromOffset(0, textureList.AbsoluteContentSize.Y + 6)
+end)
+
+local function addSectionHeader(parent, title, order)
+    return make("TextLabel", {
+        Name = title:gsub("%s+", "") .. "Header",
+        Size = UDim2.new(1, -7, 0, 20),
+        BackgroundTransparency = 1,
+        Text = title,
+        TextColor3 = Color3.fromRGB(197, 59, 59),
+        TextSize = 11,
+        Font = Enum.Font.GothamSemibold,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        LayoutOrder = order
+    }, parent)
+end
+
+local autoApplyStates = {}
+local characterConnection = nil
+local unloaded = false
+
+-- Keep Auto Apply choices across script re-executions and place changes.
+-- The executor environment is the primary store; file APIs are a fallback.
+local autoApplyEnvironment = _G
+pcall(function()
+    if type(getgenv) == "function" then
+        autoApplyEnvironment = getgenv()
+    end
+end)
+
+local autoApplyStorageKey = "__iylzzVisualAutoApply"
+local autoApplyFile = "iylzz_visual_autoapply.json"
+local HttpService = game:GetService("HttpService")
+
+local persistentAutoApply = autoApplyEnvironment[autoApplyStorageKey]
+if type(persistentAutoApply) ~= "table" then
+    persistentAutoApply = {}
+end
+
+local function loadAutoApplyFile()
+    if type(readfile) ~= "function" then
+        return
+    end
+
+    local ok, contents = pcall(function()
+        if type(isfile) == "function" and not isfile(autoApplyFile) then
+            return nil
+        end
+        return readfile(autoApplyFile)
+    end)
+
+    if ok and type(contents) == "string" and contents ~= "" then
+        local decodedOk, decoded = pcall(function()
+            return HttpService:JSONDecode(contents)
+        end)
+        if decodedOk and type(decoded) == "table" then
+            for label, enabled in pairs(decoded) do
+                if type(label) == "string" and type(enabled) == "boolean" then
+                    persistentAutoApply[label] = enabled
+                end
+            end
+        end
+    end
+end
+
+local function saveAutoApplyStates()
+    autoApplyEnvironment[autoApplyStorageKey] = persistentAutoApply
+
+    if type(writefile) == "function" then
+        pcall(function()
+            writefile(autoApplyFile, HttpService:JSONEncode(persistentAutoApply))
+        end)
+    end
+end
+
+loadAutoApplyFile()
+-- Migrate the previous Diamond Hands Auto setting to its Finisher label.
+if persistentAutoApply["Finisher: Diamond Hands"] == nil
+    and persistentAutoApply["Diamond Hands"] ~= nil then
+    persistentAutoApply["Finisher: Diamond Hands"] = persistentAutoApply["Diamond Hands"]
+    persistentAutoApply["Diamond Hands"] = nil
+end
+saveAutoApplyStates()
+
+-- Shared Auto control used by every feature tab.
+local function addAutoFeature(row, label, callback, statusLabel)
+    local auto = make("TextButton", {
+        Name = "AutoApplyButton",
+        Size = UDim2.fromOffset(72, 28),
+        Position = UDim2.new(1, -78, 0.5, -14),
+        BackgroundColor3 = Color3.fromRGB(42, 48, 43),
+        BorderSizePixel = 1,
+        BorderColor3 = Color3.fromRGB(85, 105, 88),
+        Text = "Auto: OFF",
+        TextColor3 = Color3.fromRGB(235, 245, 235),
+        TextSize = 10,
+        Font = Enum.Font.Code,
+        AutoButtonColor = true
+    }, row)
+    addCorner(auto, 0)
+
+    local state = {
+        enabled = persistentAutoApply[label] == true,
+        button = auto,
+        apply = callback
+    }
+    autoApplyStates[label] = state
+
+    local function updateButton()
+        auto.Text = state.enabled and "Auto: ON" or "Auto: OFF"
+        auto.BackgroundColor3 = state.enabled
+            and Color3.fromRGB(45, 105, 58)
+            or Color3.fromRGB(42, 48, 43)
+    end
+    updateButton()
+
+    auto.MouseButton1Click:Connect(function()
+        state.enabled = not state.enabled
+        persistentAutoApply[label] = state.enabled
+        saveAutoApplyStates()
+
+        if state.enabled then
+            local ok, err = pcall(state.apply)
+            if not ok then
+                state.enabled = false
+                persistentAutoApply[label] = false
+                saveAutoApplyStates()
+                warn("[Fleasion Pack [rivals]] Auto failed for " .. label .. ": " .. tostring(err))
+                if statusLabel then statusLabel.Text = "Auto failed: " .. tostring(err) end
+            elseif statusLabel then
+                statusLabel.Text = "Auto enabled: " .. label
+            end
+        elseif statusLabel then
+            statusLabel.Text = "Auto disabled: " .. label
+        end
+        updateButton()
+    end)
+
+    return auto
+end
+
+local function runVisual(source, label)
+    local loader, compileError = loadstring(source)
+    if not loader then
+        error(compileError or ("Could not compile " .. label))
+    end
+    loader()
+end
+
+local function addVisualOption(label, source, order)
+    local row = make("Frame", {
+        Name = label:gsub("%s+", "") .. "Row",
+        Size = UDim2.new(1, -7, 0, (label == "Minecraft Sword Knife [use default to apply skin]") and 48 or 42),
+        BackgroundColor3 = Color3.fromRGB(34, 34, 38),
+        BorderSizePixel = 1,
+        BorderColor3 = Color3.fromRGB(75, 75, 80),
+        LayoutOrder = order
+    }, visualOptions)
+    addCorner(row, 0)
+
+    make("TextLabel", {
+        Size = UDim2.new(1, -183, 1, 0),
+        Position = UDim2.fromOffset(18, 0),
+        BackgroundTransparency = 1,
+        Text = label,
+        TextColor3 = Color3.fromRGB(230, 230, 235),
+        TextSize = (label == "Minecraft Sword Knife [use default to apply skin]") and 11
+            or (label:find("stretch resolution", 1, true) and 11 or 12),
+        Font = Enum.Font.Code,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextWrapped = (label == "Minecraft Sword Knife [use default to apply skin]")
+            or label:find("stretch resolution", 1, true) ~= nil
+            or label:find("Skinchanger", 1, true) ~= nil
+    }, row)
+
+    local apply = make("TextButton", {
+        Name = "ApplyButton",
+        Size = UDim2.fromOffset(68, 30),
+        Position = UDim2.new(1, -158, 0.5, -15),
+        BackgroundColor3 = Color3.fromRGB(62, 62, 68),
+        BorderSizePixel = 1,
+        BorderColor3 = Color3.fromRGB(95, 95, 102),
+        Text = "Apply",
+        TextColor3 = Color3.fromRGB(245, 245, 245),
+        TextSize = 11,
+        Font = Enum.Font.Code,
+        AutoButtonColor = true
+    }, row)
+    addCorner(apply, 0)
+
+    local auto = make("TextButton", {
+        Name = "AutoApplyButton",
+        Size = UDim2.fromOffset(82, 30),
+        Position = UDim2.new(1, -84, 0.5, -15),
+        BackgroundColor3 = Color3.fromRGB(42, 48, 43),
+        BorderSizePixel = 1,
+        BorderColor3 = Color3.fromRGB(85, 105, 88),
+        Text = "Auto: OFF",
+        TextColor3 = Color3.fromRGB(235, 245, 235),
+        TextSize = 11,
+        Font = Enum.Font.Code,
+        AutoButtonColor = true
+    }, row)
+    addCorner(auto, 0)
+
+    local savedEnabled = persistentAutoApply[label] == true
+    autoApplyStates[label] = {
+        source = source,
+        enabled = savedEnabled,
+        button = auto,
+        apply = function() runVisual(source, label) end
+    }
+
+    if savedEnabled then
+        auto.Text = "Auto: ON"
+        auto.BackgroundColor3 = Color3.fromRGB(45, 105, 58)
+    end
+
+    apply.MouseButton1Click:Connect(function()
+        visualStatus.Text = "Applying " .. label .. "..."
+        local ok, err = pcall(runVisual, source, label)
+        if ok then
+            visualStatus.Text = label .. " applied."
+        else
+            visualStatus.Text = "Apply failed: " .. tostring(err)
+            warn("[Fleasion Pack [rivals]] " .. tostring(err))
+        end
+    end)
+
+    auto.MouseButton1Click:Connect(function()
+        local state = autoApplyStates[label]
+        state.enabled = not state.enabled
+        persistentAutoApply[label] = state.enabled
+        saveAutoApplyStates()
+
+        if state.enabled then
+            state.button.Text = "Auto: ON"
+            state.button.BackgroundColor3 = Color3.fromRGB(45, 105, 58)
+            visualStatus.Text = "Auto Apply enabled: " .. label
+            local ok, err = pcall(state.apply)
+            if not ok then
+                state.enabled = false
+                persistentAutoApply[label] = false
+                saveAutoApplyStates()
+                state.button.Text = "Auto: OFF"
+                state.button.BackgroundColor3 = Color3.fromRGB(42, 48, 43)
+                visualStatus.Text = "Auto Apply failed: " .. tostring(err)
+                warn("[Fleasion Pack [rivals]] " .. tostring(err))
+            end
+        else
+            state.button.Text = "Auto: OFF"
+            state.button.BackgroundColor3 = Color3.fromRGB(42, 48, 43)
+            visualStatus.Text = "Auto Apply disabled: " .. label
+        end
+    end)
+end
+
+addSectionHeader(visualOptions, "Skinchanger:", 1)
+
+addVisualOption("Skinchanger",
+    'loadstring(game:HttpGet("https://raw.githubusercontent.com/jeromekumah18-prog/Skinchanger/refs/heads/main/1magchNger", true))()', 2)
+
+addVisualOption("Minecraft Sword",
+    'loadstring(game:HttpGet("https://raw.githubusercontent.com/betterthanbefore0207767837-cyber/Ggdddf/refs/heads/main/Craty%20knife"))()', 3)
+
+addSectionHeader(visualOptions, "Hands:", 4)
+
+addVisualOption("No Hands",
+    'loadstring(game:HttpGet("https://raw.githubusercontent.com/betterthanbefore0207767837-cyber/Rick/refs/heads/main/Ricyyy"))()', 5)
+
+addVisualOption("Val Hands",
+    'loadstring(game:HttpGet("https://raw.githubusercontent.com/mrbeanissohot/Bean-sValorant/refs/heads/main/Valorant.lua",true))()', 6)
+
+addSectionHeader(visualOptions, "Stretch Resolution:", 7)
+
+addVisualOption("Stretch Resolution",
+    'loadstring(game:HttpGet("https://rawscripts.net/raw/Universal-Script-Stretched-Resolution-Higher-FOV-48170"))()', 8)
+
+local finisherHeader = make("TextLabel", {
+    Name = "FinisherHeader",
+    Size = UDim2.new(1, -7, 0, 20),
+    BackgroundTransparency = 1,
+    Text = "Finisher",
+    TextColor3 = Color3.fromRGB(197, 59, 59),
+    TextSize = 11,
+    Font = Enum.Font.Code,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    LayoutOrder = 9
+}, visualOptions)
+
+addVisualOption("Diamond Hands",
+    'loadstring(game:HttpGet("https://raw.githubusercontent.com/mizcanscripts/Test/refs/heads/main/diamondhands-finisherv1.4.lua", true))()', 10)
+
+-- Apply saved options automatically when this script starts in a new place.
+local function applySavedVisuals(skipFpsBoost)
+    if unloaded then
+        return
+    end
+
+    for label, state in pairs(autoApplyStates) do
+        if state.enabled and not (skipFpsBoost and label == "Perform: FPS Boost") then
+            local ok, err
+            if state.apply then
+                ok, err = pcall(state.apply)
+            elseif state.source then
+                ok, err = pcall(runVisual, state.source, label)
+            else
+                ok, err = false, "No Auto action is registered"
+            end
+            if not ok then
+                warn("[Fleasion Pack [rivals]] Auto Apply failed for "
+                    .. label .. ": " .. tostring(err))
+            end
+        end
+    end
+end
+
+task.spawn(function()
+    if not game:IsLoaded() then
+        game.Loaded:Wait()
+    end
+    task.wait(1)
+    applySavedVisuals()
+end)
+
+-- Re-apply enabled options after the character respawns.
+characterConnection = player.CharacterAdded:Connect(function()
+    task.wait(1)
+    if unloaded then
+        return
+    end
+    -- Character respawns do not trigger FPS Boost again.
+    -- FPS Boost Auto is refreshed only by newly loaded map content.
+    applySavedVisuals(true)
+end)
+
+local mispRowOrder = 2
+
+-- Remove the retired Avatar Spoofer Auto setting from saved preferences.
+persistentAutoApply["Misp: Avatar Spoofer"] = nil
+saveAutoApplyStates()
+
+local killSoundHeader = make("TextLabel", {
+    Name = "KillSoundHeader",
+    Size = UDim2.new(1, -7, 0, 22),
+    BackgroundTransparency = 1,
+    Text = "Kill Sound",
+    TextColor3 = Color3.fromRGB(197, 59, 59),
+    TextSize = 11,
+    Font = Enum.Font.GothamSemibold,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    LayoutOrder = 1
+}, mispPage)
+
+local function makeMispRow(optionName, source, customApply)
+    mispRowOrder = mispRowOrder + 1
+    local row = make("Frame", {
+        Size = UDim2.new(1, -7, 0, 48),
+        BackgroundColor3 = Color3.fromRGB(34, 34, 38),
+        BorderSizePixel = 1,
+        BorderColor3 = Color3.fromRGB(75, 75, 80),
+        LayoutOrder = mispRowOrder
+    }, mispPage)
+    addCorner(row, 0)
+
+    make("TextLabel", {
+        Size = UDim2.new(1, -166, 1, -4),
+        Position = UDim2.fromOffset(18, 2),
+        BackgroundTransparency = 1,
+        Text = optionName,
+        TextColor3 = Color3.fromRGB(235, 235, 235),
+        TextSize = 12,
+        Font = Enum.Font.Code,
+        TextWrapped = true,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Center
+    }, row)
+
+    local apply = make("TextButton", {
+        Name = "ApplyButton",
+        Size = UDim2.fromOffset(62, 28),
+        Position = UDim2.new(1, -146, 0.5, -14),
+        BackgroundColor3 = Color3.fromRGB(65, 65, 65),
+        BorderSizePixel = 1,
+        BorderColor3 = Color3.fromRGB(95, 95, 102),
+        Text = "Apply",
+        TextColor3 = Color3.new(1, 1, 1),
+        TextSize = 12,
+        Font = Enum.Font.Code,
+        AutoButtonColor = true
+    }, row)
+    addCorner(apply, 0)
+
+    local function applyMisp()
+        if customApply then
+            customApply()
+            return
+        end
+
+        local loader, compileError = loadstring(source)
+        if not loader then
+            error(compileError or ("Could not compile " .. optionName))
+        end
+        loader()
+    end
+    addAutoFeature(row, "Misp: " .. optionName, applyMisp, mispStatus)
+
+    apply.MouseButton1Click:Connect(function()
+        mispStatus.Text = "Applying " .. optionName .. "..."
+        local ok, err = pcall(applyMisp)
+
+        if ok then
+            mispStatus.Text = optionName .. " applied."
+        else
+            mispStatus.Text = "Apply failed: " .. tostring(err)
+            warn("[Fleasion Pack [rivals]] " .. tostring(err))
+        end
+    end)
+end
+
+makeMispRow("Sata Andaji",
+    'loadstring(game:HttpGet("https://raw.githubusercontent.com/betterthanbefore0207767837-cyber/Xgivfc/refs/heads/main/Ffvhhvxd"))()')
+
+-- The supplied file is a kill/hit sound replacement script, not a separate
+-- Yokai implementation. It is included under the Yokai label as requested.
+local yokaiSoundSource = [=[
+-- Kill / hit sound replacement only
+
+local function getAsset(url)
+    local success, result = pcall(function()
+        if writefile and isfile and getcustomasset then
+            local fileName = "kill_sound_" .. tostring(#url % 100000) .. ".asset"
+
+            if not isfile(fileName) then
+                local data = game:HttpGet(url)
+                if data and #data > 80 then
+                    writefile(fileName, data)
+                end
+            end
+
+            local asset = getcustomasset(fileName)
+            if asset and asset ~= "" then
+                return asset
+            end
+        end
+        return url
+    end)
+
+    return (success and result) or url
+end
+
+local Rules = {
+    {ids = {15109829804}, url = "rbxassetid://103966419660274"},
+    {ids = {16530229616}, url = "rbxassetid://103966419660274"},
+    {ids = {16530229541}, url = "rbxassetid://103966419660274"},
+    {ids = {16530229695}, url = "rbxassetid://103966419660274"},
+    {ids = {13110130082}, url = "https://66mods-assets.pages.dev/repos/InventivetalentDev/minecraft-assets/assets/minecraft/sounds/random/successful_hit.ogg"},
+}
+
+local IdMap = {}
+for _, rule in ipairs(Rules) do
+    local asset = getAsset(rule.url)
+    for _, id in ipairs(rule.ids) do
+        IdMap[tostring(id)] = asset
+    end
+end
+
+local function apply(obj)
+    if not obj or not obj:IsA("Sound") then return end
+    local success, value = pcall(function() return obj.SoundId end)
+    if not success or type(value) ~= "string" then return end
+    local id = string.match(value, "%d+")
+    if id and IdMap[id] then
+        pcall(function() obj.SoundId = IdMap[id] end)
+    end
+end
+
+game.DescendantAdded:Connect(function(obj)
+    task.spawn(function()
+        for _, delayTime in ipairs({0, 0.5, 1.5, 3, 6, 10}) do
+            if delayTime > 0 then task.wait(delayTime) end
+            if not obj or not obj.Parent then return end
+            pcall(apply, obj)
+        end
+    end)
+end)
+
+task.wait(0.25)
+for _, descendant in ipairs(game:GetDescendants()) do
+    task.spawn(function() pcall(apply, descendant) end)
+end
+]=]
+
+makeMispRow("Yokai (doesn't work on NPCs)", yokaiSoundSource)
+
+local fontHeader = make("TextLabel", {
+    Name = "FontHeader",
+    Size = UDim2.new(1, -7, 0, 22),
+    BackgroundTransparency = 1,
+    Text = "Font",
+    TextColor3 = Color3.fromRGB(197, 59, 59),
+    TextSize = 11,
+    Font = Enum.Font.GothamSemibold,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    LayoutOrder = mispRowOrder + 2
+}, mispPage)
+mispRowOrder = mispRowOrder + 2
+
+makeMispRow("Minecraft Font [whole game]",
+    'loadstring(game:HttpGet("https://rawscripts.net/raw/Universal-Script-Minecraft-font-yes-yes-yes-mommy-177871"))()')
+
+makeMispRow("normal font", nil, function()
+    for _, item in ipairs(gui:GetDescendants()) do
+        if item:IsA("TextLabel") or item:IsA("TextButton") or item:IsA("TextBox") then
+            item.Font = Enum.Font.Cartoon
+            item.TextStrokeColor3 = Color3.fromRGB(20, 20, 20)
+            item.TextStrokeTransparency = 0.18
+        end
+    end
+end)
+
+local deltaHeader = make("TextLabel", {
+    Name = "DeltaHeader",
+    Size = UDim2.new(1, -7, 0, 22),
+    BackgroundTransparency = 1,
+    Text = "Delta",
+    TextColor3 = Color3.fromRGB(197, 59, 59),
+    TextSize = 11,
+    Font = Enum.Font.GothamSemibold,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    LayoutOrder = mispRowOrder + 2
+}, mispPage)
+mispRowOrder = mispRowOrder + 2
+
+makeMispRow("Hide Delta UI [might lag]",
+    'loadstring(game:HttpGet("https://raw.githubusercontent.com/mizcanscripts/Test/refs/heads/main/bro.lua", true))()')
+
+makeMispRow("Delta Black Line Hider",
+    'loadstring(game:HttpGet("https://raw.githubusercontent.com/yBloodz/Free-scripts/refs/heads/main/iOS-BlackLineHider"))()')
+
+local weatherHeader = make("TextLabel", {
+    Name = "WeatherHeader",
+    Size = UDim2.new(1, -7, 0, 20),
+    BackgroundTransparency = 1,
+    Text = "Weather:",
+    TextColor3 = Color3.fromRGB(197, 59, 59),
+    TextSize = 11,
+    Font = Enum.Font.GothamSemibold,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    LayoutOrder = mispRowOrder + 1
+}, mispPage)
+mispRowOrder = mispRowOrder + 1
+
+makeMispRow("Snow Weather", nil, function()
+    getgenv().Snow = {
+        Enabled = true,
+        Color = Color3.fromRGB(150, 200, 255),
+        Rate = 2000,
+        Visibility = 80,
+        ParticleSize = 150,
+    }
+    local loader, compileError = loadstring(game:HttpGet(
+        "https://raw.githubusercontent.com/mizcanscripts/Test/refs/heads/main/weather-bro.lua"
+    ))
+    if not loader then
+        error(compileError or "Snow Weather loader could not compile")
+    end
+    loader()
+end)
+
+-- Small reminder displayed above the texture options.
+make("TextLabel", {
+    Name = "TextureApplyReminder",
+    Size = UDim2.new(1, -8, 0, 24),
+    BackgroundTransparency = 1,
+    Text = "Apply texture before skinchanger or might bug out",
+    TextColor3 = Color3.fromRGB(185, 185, 190),
+    TextSize = 9,
+    Font = Enum.Font.Gotham,
+    TextWrapped = true,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    TextYAlignment = Enum.TextYAlignment.Center,
+    LayoutOrder = 100
+}, visualOptions)
+
+local textureRowOrder = 100
+addSectionHeader(visualOptions, "Textures:", 99)
+local function makeTextureRow(parent, optionName, callback)
+    textureRowOrder = textureRowOrder + 1
+    local row = make("Frame", {
+        Size = UDim2.new(1, -7, 0, 42),
+        BackgroundColor3 = Color3.fromRGB(34, 34, 38),
+        BorderSizePixel = 1,
+        BorderColor3 = Color3.fromRGB(75, 75, 80),
+        LayoutOrder = textureRowOrder
+    }, parent)
+    addCorner(row, 0)
+
+    make("TextLabel", {
+        Size = UDim2.new(1, -158, 1, -4),
+        Position = UDim2.fromOffset(10, 2),
+        BackgroundTransparency = 1,
+        Text = optionName,
+        TextColor3 = Color3.fromRGB(235, 235, 235),
+        TextSize = 12,
+        Font = Enum.Font.Gotham,
+        TextWrapped = true,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Center
+    }, row)
+
+    local apply = make("TextButton", {
+        Size = UDim2.fromOffset(62, 28),
+        Position = UDim2.new(1, -146, 0.5, -14),
+        BackgroundColor3 = Color3.fromRGB(65, 65, 65),
+        Text = "Apply",
+        TextColor3 = Color3.new(1, 1, 1),
+        TextSize = 12,
+        Font = Enum.Font.GothamSemibold
+    }, row)
+    addCorner(apply, 0)
+
+    addAutoFeature(row, "Texture: " .. optionName, callback, visualStatus)
+
+    apply.MouseButton1Click:Connect(function()
+        local ok, err = pcall(callback)
+        if not ok then
+            warn("[Texture Menu] " .. tostring(err))
+        end
+    end)
+end
+
+-- Save original local appearance so Unload All can restore our own changes.
+local originalPartProperties = {}
+local originalTextureProperties = {}
+local originalSurfaceParents = {}
+
+local function rememberPart(part)
+    if not originalPartProperties[part] then
+        originalPartProperties[part] = {
+            Color = part.Color,
+            Material = part.Material
+        }
+    end
+end
+
+-- Apply using the first-seen values, so replaying a round never
+-- darkens the same part repeatedly.
+local function applyDarkToPart(object)
+    if not object:IsA("BasePart") then
+        return
+    end
+
+    rememberPart(object)
+    local original = originalPartProperties[object]
+    object.Material = Enum.Material.SmoothPlastic
+    object.Color = Color3.new(
+        original.Color.R * 0.42,
+        original.Color.G * 0.42,
+        original.Color.B * 0.42
+    )
+end
+
+local function applyDarkTexture()
+    for _, object in ipairs(workspace:GetDescendants()) do
+        applyDarkToPart(object)
+    end
+end
+
+local function applyNoTextureToObject(object)
+    if object:IsA("Decal") or object:IsA("Texture") then
+        if originalTextureProperties[object] == nil then
+            originalTextureProperties[object] = object.Transparency
+        end
+        object.Transparency = 1
+    elseif object:IsA("SurfaceAppearance") then
+        if originalSurfaceParents[object] == nil then
+            originalSurfaceParents[object] = object.Parent
+        end
+        object.Parent = nil
+    end
+end
+
+-- No Texture: hide texture instances client-side.
+local function applyNoTexture()
+    for _, object in ipairs(workspace:GetDescendants()) do
+        applyNoTextureToObject(object)
+    end
+end
+
+-- Uses the exact Minecraft texture loader supplied by the user.
+local function applyMinecraftTexture()
+    local source = 'loadstring(game:HttpGet("https://pastebin.com/raw/Cb9ExUkB"))()'
+    local loader, compileError = loadstring(source)
+    if not loader then
+        error("Minecraft loader could not compile: " .. tostring(compileError))
+    end
+    loader()
+end
+
+local function applyForniteTexture()
+    local source = 'loadstring(game:HttpGet("https://pastebin.com/raw/3vdFX3C5"))()'
+    local loader, compileError = loadstring(source)
+    if not loader then
+        error("Fornite texture loader could not compile: " .. tostring(compileError))
+    end
+    loader()
+end
+
+local function runTextureLoader(label, source)
+    local loader, compileError = loadstring(source)
+    if not loader then
+        error(label .. " loader could not compile: " .. tostring(compileError))
+    end
+    loader()
+end
+
+makeTextureRow(visualOptions, "Dark Texture", applyDarkTexture)
+makeTextureRow(visualOptions, "No Texture", applyNoTexture)
+makeTextureRow(visualOptions, "Minecraft Texture", applyMinecraftTexture)
+makeTextureRow(visualOptions, "Fornite Texture", applyForniteTexture)
+makeTextureRow(visualOptions, "Chromeheart skybox & no hands with sounds", function()
+    runTextureLoader("Chromeheart skybox & no hands with sounds", 'loadstring(game:HttpGet("https://raw.githubusercontent.com/betterthanbefore0207767837-cyber/Expensive/refs/heads/main/Chromeheart"))()')
+end)
+makeTextureRow(visualOptions, "Scribble darkblue skybox", function()
+    runTextureLoader("Scribble darkblue skybox", 'loadstring(game:HttpGet("https://raw.githubusercontent.com/betterthanbefore0207767837-cyber/1mag/refs/heads/main/Scribble"))()')
+end)
+
+-- Re-apply enabled map effects to newly loaded round geometry and textures.
+local textureDescendantConnection = workspace.DescendantAdded:Connect(function(object)
+    task.defer(function()
+        if unloaded or not object.Parent then
+            return
+        end
+
+        local darkState = autoApplyStates["Texture: Dark Texture"]
+        if darkState and darkState.enabled then
+            pcall(applyDarkToPart, object)
+        end
+
+        local noTextureState = autoApplyStates["Texture: No Texture"]
+        if noTextureState and noTextureState.enabled then
+            pcall(applyNoTextureToObject, object)
+        end
+    end)
+end)
+
+local settingsStatus = make("TextLabel", {
+    Name = "SettingsStatus",
+    Size = UDim2.new(1, -8, 0, 22),
+    BackgroundTransparency = 1,
+    Text = "Settings ready.",
+    TextColor3 = Color3.fromRGB(180, 180, 185),
+    TextSize = 11,
+    Font = Enum.Font.Code,
+    TextWrapped = true,
+    LayoutOrder = 1
+}, settingsPage)
+
+-- Fixed pack title; developer-name switching has been removed.
+topBar.Text = "Iylzz’s Fleasion Pack"
+
+-- Theme Colour controls: enter hex colours such as #18181C and #4A78C2.
+local themeRow = make("Frame", {
+    Name = "ThemeColourRow",
+    Size = UDim2.new(1, -7, 0, 66),
+    BackgroundColor3 = Color3.fromRGB(34, 34, 38),
+    BorderSizePixel = 1,
+    BorderColor3 = Color3.fromRGB(75, 75, 80),
+    LayoutOrder = 3
+}, settingsPage)
+addCorner(themeRow, 0)
+
+make("TextLabel", {
+    Size = UDim2.new(1, -10, 0, 22),
+    Position = UDim2.fromOffset(8, 2),
+    BackgroundTransparency = 1,
+    Text = "Theme Colour  |  Menu + UI",
+    TextColor3 = Color3.fromRGB(230, 230, 235),
+    TextSize = 12,
+    Font = Enum.Font.Code,
+    TextXAlignment = Enum.TextXAlignment.Left
+}, themeRow)
+
+local menuColourInput = make("TextBox", {
+    Name = "MenuColourInput",
+    Size = UDim2.fromOffset(112, 27),
+    Position = UDim2.fromOffset(8, 32),
+    BackgroundColor3 = Color3.fromRGB(22, 22, 25),
+    BorderSizePixel = 1,
+    BorderColor3 = Color3.fromRGB(85, 85, 92),
+    Text = "#121214",
+    PlaceholderText = "Menu #hex",
+    TextColor3 = Color3.fromRGB(245, 245, 245),
+    PlaceholderColor3 = Color3.fromRGB(160, 160, 160),
+    TextSize = 11,
+    Font = Enum.Font.Code,
+    ClearTextOnFocus = false
+}, themeRow)
+
+local uiColourInput = make("TextBox", {
+    Name = "UIColourInput",
+    Size = UDim2.fromOffset(112, 27),
+    Position = UDim2.fromOffset(128, 32),
+    BackgroundColor3 = Color3.fromRGB(22, 22, 25),
+    BorderSizePixel = 1,
+    BorderColor3 = Color3.fromRGB(85, 85, 92),
+    Text = "#38383B",
+    PlaceholderText = "UI #hex",
+    TextColor3 = Color3.fromRGB(245, 245, 245),
+    PlaceholderColor3 = Color3.fromRGB(160, 160, 160),
+    TextSize = 11,
+    Font = Enum.Font.Code,
+    ClearTextOnFocus = false
+}, themeRow)
+
+local themeApplyButton = make("TextButton", {
+    Name = "ThemeColourApply",
+    Size = UDim2.fromOffset(68, 27),
+    Position = UDim2.new(1, -78, 0, 32),
+    BackgroundColor3 = Color3.fromRGB(62, 62, 68),
+    BorderSizePixel = 1,
+    BorderColor3 = Color3.fromRGB(95, 95, 102),
+    Text = "Apply",
+    TextColor3 = Color3.fromRGB(245, 245, 245),
+    TextSize = 11,
+    Font = Enum.Font.Code,
+    AutoButtonColor = true
+}, themeRow)
+addCorner(themeApplyButton, 0)
+
+local function applyThemeColours()
+    local menuHex = menuColourInput.Text:gsub("%s+", "")
+    local uiHex = uiColourInput.Text:gsub("%s+", "")
+    local menuOk, menuColour = pcall(function() return Color3.fromHex(menuHex) end)
+    local uiOk, uiColour = pcall(function() return Color3.fromHex(uiHex) end)
+    if not menuOk or not uiOk then
+        settingsStatus.Text = "Invalid colour. Use hex format like #3366CC."
+        return
+    end
+
+    menu.BackgroundColor3 = menuColour
+    toggle.BackgroundColor3 = uiColour
+    tabBar.BackgroundColor3 = uiColour
+    for _, tab in ipairs({visualTab, textureTab, mispTab, performTab, settingsTab}) do
+        tab.BackgroundColor3 = uiColour
+    end
+    for _, object in ipairs(menu:GetDescendants()) do
+        if object:IsA("TextButton") and object.Name ~= "AutoApplyButton"
+            and object.Name ~= "UnloadAllButton" then
+            object.BackgroundColor3 = uiColour
+        end
+    end
+    themeApplyButton.BackgroundColor3 = uiColour
+    settingsStatus.Text = "Theme colours applied."
+end
+
+themeApplyButton.MouseButton1Click:Connect(applyThemeColours)
+
+addSectionHeader(mispPage, "Sky Changer:", 219)
+
+local skyChangerRow = make("Frame", {
+    Name = "SkyChangerRow",
+    Size = UDim2.new(1, -7, 0, 48),
+    BackgroundColor3 = Color3.fromRGB(34, 34, 38),
+    BorderSizePixel = 1,
+    BorderColor3 = Color3.fromRGB(75, 75, 80),
+    LayoutOrder = 220
+}, mispPage)
+addCorner(skyChangerRow, 0)
+
+make("TextLabel", {
+    Size = UDim2.new(1, -166, 1, 0),
+    Position = UDim2.fromOffset(9, 0),
+    BackgroundTransparency = 1,
+    Text = "Sky Changer [must import JPG to your executor workspace]",
+    TextColor3 = Color3.fromRGB(230, 230, 235),
+    TextSize = 11,
+    Font = Enum.Font.Code,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    TextWrapped = true
+}, skyChangerRow)
+
+local skyApplyButton = make("TextButton", {
+    Name = "SkyChangerApply",
+    Size = UDim2.fromOffset(62, 28),
+    Position = UDim2.new(1, -146, 0.5, -14),
+    BackgroundColor3 = Color3.fromRGB(62, 62, 68),
+    BorderSizePixel = 1,
+    BorderColor3 = Color3.fromRGB(95, 95, 102),
+    Text = "Apply",
+    TextColor3 = Color3.fromRGB(245, 245, 245),
+    TextSize = 11,
+    Font = Enum.Font.Code,
+    AutoButtonColor = true
+}, skyChangerRow)
+addCorner(skyApplyButton, 0)
+
+local unloadAllButton = make("TextButton", {
+    Name = "UnloadAllButton",
+    Size = UDim2.new(1, -7, 0, 42),
+    BackgroundColor3 = Color3.fromRGB(92, 38, 38),
+    BorderSizePixel = 1,
+    BorderColor3 = Color3.fromRGB(135, 65, 65),
+    Text = "Unload All",
+    TextColor3 = Color3.fromRGB(255, 245, 245),
+    TextSize = 14,
+    Font = Enum.Font.Code,
+    AutoButtonColor = true,
+    LayoutOrder = 7
+}, settingsPage)
+addCorner(unloadAllButton, 0)
+
+
+local function makeSettingsActionRow(name, order)
+    local row = make("Frame", {
+        Name = name:gsub("%s+", "") .. "Row",
+        Size = UDim2.new(1, -7, 0, 48),
+        BackgroundColor3 = Color3.fromRGB(34, 34, 38),
+        BorderSizePixel = 1,
+        BorderColor3 = Color3.fromRGB(75, 75, 80),
+        LayoutOrder = 230 + order
+    }, mispPage)
+    addCorner(row, 0)
+
+    make("TextLabel", {
+        Size = UDim2.new(1, -175, 1, 0),
+        Position = UDim2.fromOffset(18, 0),
+        BackgroundTransparency = 1,
+        Text = name,
+        TextColor3 = Color3.fromRGB(230, 230, 235),
+        TextSize = name:find("Hyperslide", 1, true) and 13 or 12,
+        Font = Enum.Font.Code,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextWrapped = name:find("Hyperslide", 1, true) ~= nil
+    }, row)
+
+    local applyButton = make("TextButton", {
+        Name = "ApplyButton",
+        Size = UDim2.fromOffset(62, 28),
+        Position = UDim2.new(1, -146, 0.5, -14),
+        BackgroundColor3 = Color3.fromRGB(62, 62, 68),
+        BorderSizePixel = 1,
+        BorderColor3 = Color3.fromRGB(95, 95, 102),
+        Text = "Apply",
+        TextColor3 = Color3.fromRGB(245, 245, 245),
+        TextSize = 11,
+        Font = Enum.Font.Code,
+        AutoButtonColor = true
+    }, row)
+    addCorner(applyButton, 0)
+
+    return applyButton, row
+end
+
+local Lighting = game:GetService("Lighting")
+local RunService = game:GetService("RunService")
+
+addSectionHeader(mispPage, "Slide:", 229)
+
+local airslideButton, airslideRow = makeSettingsActionRow("Airslide [reset executor to turn off airslide]", 5)
+local hyperslideButton, hyperslideRow = makeSettingsActionRow(
+    "Hyperslide [sticks you to the ground, can’t jump also]",
+    6
+)
+
+local function applyAirslide()
+    if type(setfflag) ~= "function" then
+        error("This environment does not support setfflag.")
+    end
+
+    local success, err = pcall(function()
+        setfflag("ExtraFloorRaycastDistanceHipHeightPercent", "99999999999")
+        setfflag("TaskSchedulerTargetFps", "999999999999999999999")
+    end)
+
+    if success then
+        mispStatus.Text = "Airslide applied. Close the executor to reset."
+        print("[Delta] FFlags applied.")
+    else
+        mispStatus.Text = "Airslide failed: " .. tostring(err)
+        warn("[Delta] Failed:", err)
+    end
+end
+
+local hyperSlideConnection = nil
+local hyperSlideCeilingPart = nil
+local hyperSlideMechanics = nil
+
+local function applyHyperslide()
+    if hyperSlideConnection then
+        hyperSlideConnection:Disconnect()
+        hyperSlideConnection = nil
+    end
+    if hyperSlideCeilingPart then
+        hyperSlideCeilingPart:Destroy()
+        hyperSlideCeilingPart = nil
+    end
+
+    hyperSlideMechanics = nil
+
+    task.spawn(function()
+        repeat task.wait(0.1) until game:IsLoaded()
+        task.wait(2)
+        if unloaded then return end
+
+        local playerScripts = player:WaitForChild("PlayerScripts")
+        local controllers = playerScripts:WaitForChild("Controllers", 8)
+        if not controllers then
+            mispStatus.Text = "Hyperslide failed: Controllers not found."
+            return
+        end
+
+        local mechanicsModule = controllers:WaitForChild("MechanicsController", 8)
+        if not mechanicsModule then
+            mispStatus.Text = "Hyperslide failed: MechanicsController not found."
+            return
+        end
+
+        local ok, mechanics = pcall(require, mechanicsModule)
+        if not ok then
+            mispStatus.Text = "Hyperslide failed: " .. tostring(mechanics)
+            return
+        end
+
+        if unloaded then return end
+        hyperSlideMechanics = mechanics
+
+        local ceilingPart = Instance.new("Part")
+        ceilingPart.Name = "HyperSlideCeiling"
+        ceilingPart.Size = Vector3.new(8, 0.3, 8)
+        ceilingPart.Anchored = true
+        ceilingPart.CanCollide = true
+        ceilingPart.Transparency = 1
+        ceilingPart.CanQuery = false
+        ceilingPart.CanTouch = false
+        ceilingPart.Material = Enum.Material.SmoothPlastic
+        ceilingPart.Parent = workspace
+        hyperSlideCeilingPart = ceilingPart
+
+        mispStatus.Text = "Hyperslide applied."
+    end)
+
+    hyperSlideConnection = RunService.RenderStepped:Connect(function()
+        local mechanics = hyperSlideMechanics
+        local ceilingPart = hyperSlideCeilingPart
+        if not mechanics or not ceilingPart or not ceilingPart.Parent then
+            return
+        end
+
+        if mechanics._sliding_cooldown and mechanics._sliding_cooldown > 0 then
+            mechanics._sliding_cooldown = 0
+        end
+
+        local character = player.Character
+        local root = character and character:FindFirstChild("HumanoidRootPart")
+        if root then
+            ceilingPart.CFrame = CFrame.new(
+                root.Position + Vector3.new(0, 2.42, 0)
+            )
+        end
+    end)
+end
+
+addAutoFeature(airslideRow, "Misp: Airslide", applyAirslide, mispStatus)
+addAutoFeature(hyperslideRow, "Misp: Hyperslide", applyHyperslide, mispStatus)
+
+airslideButton.MouseButton1Click:Connect(function()
+    applyAirslide()
+end)
+
+hyperslideButton.MouseButton1Click:Connect(function()
+    mispStatus.Text = "Applying Hyperslide..."
+    local ok, err = pcall(applyHyperslide)
+    if not ok then
+        mispStatus.Text = "Hyperslide failed: " .. tostring(err)
+        warn("[Fleasion Pack [rivals]] " .. tostring(err))
+    end
+end)
+
+
+local skyChangerConnection = nil
+local customSky = nil
+local skyAssets = nil
+local originalLighting = nil
+
+local skyFiles = {
+    "sky512_bk.jpg",
+    "sky512_dn.jpg",
+    "sky512_ft.jpg",
+    "sky512_lf.jpg",
+    "sky512_rt.jpg",
+    "sky512_up.jpg"
+}
+
+local function applySkyChanger()
+    if type(getcustomasset) ~= "function" then
+        error("Your executor does not support getcustomasset.")
+    end
+
+    local assets = {}
+    for _, fileName in ipairs(skyFiles) do
+        local ok, asset = pcall(getcustomasset, fileName)
+        if not ok or type(asset) ~= "string" then
+            error("Missing or unreadable file: " .. fileName)
+        end
+        assets[fileName] = asset
+    end
+
+    if skyChangerConnection then
+        skyChangerConnection:Disconnect()
+        skyChangerConnection = nil
+    end
+    if textureDescendantConnection then
+        textureDescendantConnection:Disconnect()
+        textureDescendantConnection = nil
+    end
+    if customSky then
+        customSky:Destroy()
+        customSky = nil
+    end
+
+    skyAssets = assets
+
+    local function createCustomSky()
+        local sky = Instance.new("Sky")
+        sky.Name = "iylzzCustomSky"
+        sky.SkyboxBk = skyAssets["sky512_bk.jpg"]
+        sky.SkyboxDn = skyAssets["sky512_dn.jpg"]
+        sky.SkyboxFt = skyAssets["sky512_ft.jpg"]
+        sky.SkyboxLf = skyAssets["sky512_lf.jpg"]
+        sky.SkyboxRt = skyAssets["sky512_rt.jpg"]
+        sky.SkyboxUp = skyAssets["sky512_up.jpg"]
+        sky.Parent = Lighting
+        return sky
+    end
+
+    customSky = createCustomSky()
+
+    -- Rebuild it if a round transition removes the previous Sky instance.
+    skyChangerConnection = RunService.RenderStepped:Connect(function()
+        if not unloaded and (not customSky or customSky.Parent ~= Lighting) then
+            if customSky then
+                pcall(function() customSky:Destroy() end)
+            end
+            customSky = createCustomSky()
+        end
+    end)
+
+    mispStatus.Text = "Sky Changer applied. Lighting unchanged."
+end
+
+addAutoFeature(skyChangerRow, "Misp: Sky Changer", applySkyChanger, mispStatus)
+
+skyApplyButton.MouseButton1Click:Connect(function()
+    mispStatus.Text = "Loading skybox files..."
+    local ok, err = pcall(applySkyChanger)
+    if not ok then
+        mispStatus.Text = "Sky Changer failed: " .. tostring(err)
+        warn("[Fleasion Pack [rivals]] " .. tostring(err))
+    end
+end)
+
+-- iylzz FPS Boost. The supplied optimizer is wrapped with reversible
+-- snapshots and a single managed DescendantAdded connection.
+local Workspace = game:GetService("Workspace")
+local fpsBoostEnabled = false -- persistent Auto Apply state
+local fpsBoostApplied = false -- current-session snapshot is active
+local fpsBoostConnection = nil
+local fpsMapRescanToken = 0
+local fpsOriginalProperties = {}
+local fpsOriginalLighting = nil
+local fpsOriginalQuality = nil
+
+local function rememberFpsProperty(object, property)
+    local snapshot = fpsOriginalProperties[object]
+    if not snapshot then
+        snapshot = {}
+        fpsOriginalProperties[object] = snapshot
+    end
+    if snapshot[property] == nil then
+        local ok, value = pcall(function()
+            return object[property]
+        end)
+        if ok then
+            snapshot[property] = value
+        end
+    end
+end
+
+local function optimizeFpsObject(obj)
+    pcall(function()
+        if obj:IsA("BasePart") then
+            rememberFpsProperty(obj, "CastShadow")
+            rememberFpsProperty(obj, "Reflectance")
+            rememberFpsProperty(obj, "Material")
+            obj.CastShadow = false
+            obj.Reflectance = 0
+            obj.Material = Enum.Material.SmoothPlastic
+        elseif obj:IsA("ParticleEmitter")
+            or obj:IsA("Trail")
+            or obj:IsA("Beam")
+            or obj:IsA("Fire")
+            or obj:IsA("Smoke")
+            or obj:IsA("Sparkles")
+            or obj:IsA("PostEffect") then
+            rememberFpsProperty(obj, "Enabled")
+            obj.Enabled = false
+        end
+    end)
+end
+
+local function restoreFpsBoost()
+    if fpsBoostConnection then
+        fpsBoostConnection:Disconnect()
+        fpsBoostConnection = nil
+    end
+
+    for object, properties in pairs(fpsOriginalProperties) do
+        if object and object.Parent then
+            for property, value in pairs(properties) do
+                pcall(function()
+                    object[property] = value
+                end)
+            end
+        end
+    end
+    table.clear(fpsOriginalProperties)
+
+    if fpsOriginalLighting then
+        pcall(function()
+            Lighting.GlobalShadows = fpsOriginalLighting.GlobalShadows
+            Lighting.EnvironmentDiffuseScale = fpsOriginalLighting.EnvironmentDiffuseScale
+            Lighting.EnvironmentSpecularScale = fpsOriginalLighting.EnvironmentSpecularScale
+        end)
+        fpsOriginalLighting = nil
+    end
+
+    if fpsOriginalQuality ~= nil then
+        pcall(function()
+            settings().Rendering.QualityLevel = fpsOriginalQuality
+        end)
+        fpsOriginalQuality = nil
+    end
+
+    fpsBoostEnabled = false
+    fpsBoostApplied = false
+    fpsAutoButton.Text = "Auto: OFF"
+    fpsAutoButton.BackgroundColor3 = Color3.fromRGB(42, 48, 43)
+end
+
+local function applyFpsBoostOnce()
+    if unloaded then
+        error("The UI has been unloaded.")
+    end
+    if not game:IsLoaded() then
+        game.Loaded:Wait()
+    end
+    if fpsBoostApplied then
+        for _, obj in ipairs(Workspace:GetDescendants()) do
+            optimizeFpsObject(obj)
+        end
+        return
+    end
+
+    fpsOriginalLighting = {
+        GlobalShadows = Lighting.GlobalShadows,
+        EnvironmentDiffuseScale = Lighting.EnvironmentDiffuseScale,
+        EnvironmentSpecularScale = Lighting.EnvironmentSpecularScale
+    }
+    pcall(function()
+        fpsOriginalQuality = settings().Rendering.QualityLevel
+    end)
+
+    pcall(function()
+        settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+    end)
+    Lighting.GlobalShadows = false
+    Lighting.EnvironmentDiffuseScale = 0
+    Lighting.EnvironmentSpecularScale = 0
+
+    for _, obj in ipairs(Workspace:GetDescendants()) do
+        optimizeFpsObject(obj)
+    end
+
+    fpsBoostApplied = true
+    print("[iylzz FPS Boost] Applied for this session.")
+end
+
+local function enableFpsBoostAuto()
+    applyFpsBoostOnce()
+    fpsBoostEnabled = true
+
+    if not fpsBoostConnection then
+        fpsBoostConnection = Workspace.DescendantAdded:Connect(function(obj)
+            if not fpsBoostEnabled or unloaded then
+                return
+            end
+
+            -- Optimize new map objects immediately.
+            optimizeFpsObject(obj)
+
+            -- Then rescan after the map finishes streaming/building.
+            -- The token makes this a quiet-period debounce.
+            fpsMapRescanToken = fpsMapRescanToken + 1
+            local thisToken = fpsMapRescanToken
+            task.delay(1, function()
+                if thisToken ~= fpsMapRescanToken
+                    or not fpsBoostEnabled
+                    or unloaded then
+                    return
+                end
+
+                for _, descendant in ipairs(Workspace:GetDescendants()) do
+                    optimizeFpsObject(descendant)
+                end
+                print("[iylzz FPS Boost] Refreshed for newly loaded map.")
+            end)
+        end)
+    end
+
+    fpsAutoButton.Text = "Auto: ON"
+    fpsAutoButton.BackgroundColor3 = Color3.fromRGB(45, 105, 58)
+    performStatus.Text = "FPS Boost Auto Apply enabled."
+end
+
+fpsApplyButton.MouseButton1Click:Connect(function()
+    performStatus.Text = "Applying FPS Boost for this session..."
+    local ok, err = pcall(applyFpsBoostOnce)
+    if ok then
+        performStatus.Text = "FPS Boost applied temporarily for this session."
+    else
+        performStatus.Text = "FPS Boost failed: " .. tostring(err)
+        warn("[iylzz FPS Boost] " .. tostring(err))
+    end
+end)
+
+local fpsAutoSaved = persistentAutoApply["Perform: FPS Boost"] == true
+local fpsAutoState = {
+    enabled = fpsAutoSaved,
+    button = fpsAutoButton,
+    apply = enableFpsBoostAuto
+}
+autoApplyStates["Perform: FPS Boost"] = fpsAutoState
+if fpsAutoSaved then
+    fpsAutoButton.Text = "Auto: ON"
+    fpsAutoButton.BackgroundColor3 = Color3.fromRGB(45, 105, 58)
+end
+
+fpsAutoButton.MouseButton1Click:Connect(function()
+    fpsAutoState.enabled = not fpsAutoState.enabled
+    persistentAutoApply["Perform: FPS Boost"] = fpsAutoState.enabled
+    saveAutoApplyStates()
+
+    if fpsAutoState.enabled then
+        local ok, err = pcall(enableFpsBoostAuto)
+        if not ok then
+            fpsAutoState.enabled = false
+            persistentAutoApply["Perform: FPS Boost"] = false
+            saveAutoApplyStates()
+            fpsAutoButton.Text = "Auto: OFF"
+            fpsAutoButton.BackgroundColor3 = Color3.fromRGB(42, 48, 43)
+            performStatus.Text = "FPS Boost Auto Apply failed: " .. tostring(err)
+            warn("[iylzz FPS Boost] " .. tostring(err))
+        end
+    else
+        restoreFpsBoost()
+        performStatus.Text = "FPS Boost Auto Apply disabled; settings restored."
+    end
+end)
+
+local function unloadAll()
+    if unloaded then
+        return
+    end
+    unloaded = true
+
+    if fpsBoostApplied or fpsBoostEnabled or fpsBoostConnection
+        or next(fpsOriginalProperties) ~= nil then
+        restoreFpsBoost()
+    end
+
+    if skyChangerConnection then
+        skyChangerConnection:Disconnect()
+        skyChangerConnection = nil
+    end
+    if customSky then
+        customSky:Destroy()
+        customSky = nil
+    end
+    if hyperSlideConnection then
+        hyperSlideConnection:Disconnect()
+        hyperSlideConnection = nil
+    end
+    if hyperSlideCeilingPart then
+        hyperSlideCeilingPart:Destroy()
+        hyperSlideCeilingPart = nil
+    end
+    hyperSlideMechanics = nil
+    -- Stop this menu's respawn auto-apply behavior.
+    for label, state in pairs(autoApplyStates) do
+        state.enabled = false
+        persistentAutoApply[label] = false
+    end
+    saveAutoApplyStates()
+    if characterConnection then
+        characterConnection:Disconnect()
+        characterConnection = nil
+    end
+
+    -- Restore BasePart properties changed by Dark Texture.
+    for part, properties in pairs(originalPartProperties) do
+        if part and part.Parent then
+            pcall(function()
+                part.Color = properties.Color
+                part.Material = properties.Material
+            end)
+        end
+    end
+
+    -- Restore texture visibility changed by No Texture.
+    for textureObject, transparency in pairs(originalTextureProperties) do
+        if textureObject and textureObject.Parent then
+            pcall(function()
+                textureObject.Transparency = transparency
+            end)
+        end
+    end
+
+    -- Reattach SurfaceAppearance instances hidden by No Texture.
+    for surface, oldParent in pairs(originalSurfaceParents) do
+        if surface and oldParent and oldParent.Parent then
+            pcall(function()
+                surface.Parent = oldParent
+            end)
+        end
+    end
+
+    -- Remove this menu and its toggle control.
+    gui:Destroy()
+end
+
+unloadAllButton.MouseButton1Click:Connect(unloadAll)
+
+visualTab.MouseButton1Click:Connect(function()
+    visualPage.Visible = true
+    texturePage.Visible = false
+    mispPage.Visible = false
+    performPage.Visible = false
+    settingsPage.Visible = false
+    othersPage.Visible = false
+    visualTab.BackgroundColor3 = Color3.fromRGB(197, 59, 59)
+    textureTab.BackgroundColor3 = Color3.fromRGB(12, 13, 13)
+    mispTab.BackgroundColor3 = Color3.fromRGB(12, 13, 13)
+    performTab.BackgroundColor3 = Color3.fromRGB(12, 13, 13)
+    settingsTab.BackgroundColor3 = Color3.fromRGB(12, 13, 13)
+    othersTab.BackgroundColor3 = Color3.fromRGB(12, 13, 13)
+end)
+
+textureTab.MouseButton1Click:Connect(function()
+    visualPage.Visible = false
+    texturePage.Visible = true
+    mispPage.Visible = false
+    performPage.Visible = false
+    settingsPage.Visible = false
+    othersPage.Visible = false
+    visualTab.BackgroundColor3 = Color3.fromRGB(12, 13, 13)
+    textureTab.BackgroundColor3 = Color3.fromRGB(197, 59, 59)
+    mispTab.BackgroundColor3 = Color3.fromRGB(12, 13, 13)
+    performTab.BackgroundColor3 = Color3.fromRGB(12, 13, 13)
+    settingsTab.BackgroundColor3 = Color3.fromRGB(12, 13, 13)
+    othersTab.BackgroundColor3 = Color3.fromRGB(12, 13, 13)
+end)
+
+mispTab.MouseButton1Click:Connect(function()
+    visualPage.Visible = false
+    texturePage.Visible = false
+    mispPage.Visible = true
+    performPage.Visible = false
+    settingsPage.Visible = false
+    othersPage.Visible = false
+    visualTab.BackgroundColor3 = Color3.fromRGB(12, 13, 13)
+    textureTab.BackgroundColor3 = Color3.fromRGB(12, 13, 13)
+    mispTab.BackgroundColor3 = Color3.fromRGB(197, 59, 59)
+    performTab.BackgroundColor3 = Color3.fromRGB(12, 13, 13)
+    settingsTab.BackgroundColor3 = Color3.fromRGB(12, 13, 13)
+    othersTab.BackgroundColor3 = Color3.fromRGB(12, 13, 13)
+end)
+
+performTab.MouseButton1Click:Connect(function()
+    visualPage.Visible = false
+    texturePage.Visible = false
+    mispPage.Visible = false
+    performPage.Visible = true
+    settingsPage.Visible = false
+    othersPage.Visible = false
+    visualTab.BackgroundColor3 = Color3.fromRGB(12, 13, 13)
+    textureTab.BackgroundColor3 = Color3.fromRGB(12, 13, 13)
+    mispTab.BackgroundColor3 = Color3.fromRGB(12, 13, 13)
+    performTab.BackgroundColor3 = Color3.fromRGB(197, 59, 59)
+    settingsTab.BackgroundColor3 = Color3.fromRGB(12, 13, 13)
+    othersTab.BackgroundColor3 = Color3.fromRGB(12, 13, 13)
+end)
+
+settingsTab.MouseButton1Click:Connect(function()
+    visualPage.Visible = false
+    texturePage.Visible = false
+    mispPage.Visible = false
+    performPage.Visible = false
+    settingsPage.Visible = true
+    othersPage.Visible = false
+    visualTab.BackgroundColor3 = Color3.fromRGB(12, 13, 13)
+    textureTab.BackgroundColor3 = Color3.fromRGB(12, 13, 13)
+    mispTab.BackgroundColor3 = Color3.fromRGB(12, 13, 13)
+    performTab.BackgroundColor3 = Color3.fromRGB(12, 13, 13)
+    settingsTab.BackgroundColor3 = Color3.fromRGB(197, 59, 59)
+    othersTab.BackgroundColor3 = Color3.fromRGB(12, 13, 13)
+end)
+
+othersTab.MouseButton1Click:Connect(function()
+    visualPage.Visible = false
+    texturePage.Visible = false
+    mispPage.Visible = false
+    performPage.Visible = false
+    settingsPage.Visible = false
+    othersPage.Visible = true
+    visualTab.BackgroundColor3 = Color3.fromRGB(12, 13, 13)
+    textureTab.BackgroundColor3 = Color3.fromRGB(12, 13, 13)
+    mispTab.BackgroundColor3 = Color3.fromRGB(12, 13, 13)
+    performTab.BackgroundColor3 = Color3.fromRGB(12, 13, 13)
+    settingsTab.BackgroundColor3 = Color3.fromRGB(12, 13, 13)
+    othersTab.BackgroundColor3 = Color3.fromRGB(197, 59, 59)
+end)
+
+toggle.MouseButton1Click:Connect(function()
+    menu.Visible = not menu.Visible
+end)
